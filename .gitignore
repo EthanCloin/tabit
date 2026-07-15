@@ -1,0 +1,4 @@
+# sample_vault is a scratch Obsidian vault for local testing — plug in your own contents.
+# Only the directory itself is tracked (via .gitkeep); everything a developer drops in stays local.
+sample_vault/*
+!sample_vault/.gitkeep

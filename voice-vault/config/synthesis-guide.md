@@ -23,8 +23,10 @@ is read on every run and is the main lever (alongside `examples/`) for steering 
 
 - Prefer `[[wikilinks]]` over prose references. Link the first mention of any concept that
   is (or should be) its own note.
-- Only link titles that exist in the provided index, or that you are creating in this run.
-  Don't invent links to notes that won't resolve.
+- Stub links are fine. If a concept clearly deserves its own note but none exists yet, link it
+  anyway — an unresolved `[[wikilink]]` is a feature, not a defect: it surfaces the gap in
+  search and the graph so the note gets written later. Prefer linking to a real/created note
+  when one exists; reach for a stub only when the concept is genuinely note-worthy.
 - When a project uses a concept, link from the project note to the concept note.
 
 ## Lifecycle (evergreen, merge-with-preserve)
@@ -39,4 +41,7 @@ is read on every run and is the main lever (alongside `examples/`) for steering 
 ## Domains
 
 - File every note into exactly one domain from `taxonomy.md`.
-- If nothing fits, propose a new domain (name + one-line description) rather than forcing it.
+- Structure must be earned. Keep domains as big buckets; don't propose a new one just because
+  a note doesn't fit neatly — propose one only when nothing existing genuinely fits.
+- Prefer growing a domain's links (and, eventually, a Map of Content the user builds) over
+  tagging as a note collection grows — tags fragment; links compound.

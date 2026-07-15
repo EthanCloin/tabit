@@ -8,10 +8,13 @@
 audio_src = "/absolute/path/to/Vault/_voice-inbox"
 
 # Everything the app writes lives under here (notes, transcripts, archive, system state).
-output_dir = "/absolute/path/to/Vault/Voice Notes"
+# STRICT SEPARATION: the app writes ONLY inside this folder and never touches user-authored
+# vault space. Default to a dedicated subfolder of the vault named `dah`.
+output_dir = "/absolute/path/to/Vault/dah"
 
 # OPTIONAL read-only folder of existing notes to link into (e.g. your whole vault).
-# Omit to run fully decoupled — links then resolve only among voice-vault's own notes.
+# The app reads this only to resolve [[wikilinks]] to your existing notes — never writes here.
+# output_dir may live inside it (the indexer skips output_dir). Omit to run fully decoupled.
 # link_context_dir = "/absolute/path/to/Vault"
 
 # User-owned control files (the heart of "I steer it").

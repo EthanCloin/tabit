@@ -14,6 +14,8 @@ Two ways entries land here:
 
 - Keep summaries tight — one or two sentences before the first heading, not a paragraph.
 - Preserve my parenthetical asides; don't sand them out.
+- When a concept deserves its own note but doesn't have one yet, link it anyway (a stub
+  `[[wikilink]]`) instead of skipping the link or writing it out in prose.
 
 ---
 
