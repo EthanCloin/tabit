@@ -31,7 +31,7 @@ class _RecordingBackend(SynthesisBackend):
         self.calls: list[tuple[str, str]] = []
         self.note_body = note_body
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, *, model: str | None = None) -> str:
         self.calls.append((system, user))
         if '"notes"' in user or "Return JSON" in user:
             return (

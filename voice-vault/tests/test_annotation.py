@@ -32,7 +32,7 @@ class _RecordingBackend(SynthesisBackend):
         self.last_user: str | None = None
         self.reply = reply
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, *, model: str | None = None) -> str:
         self.last_system = system
         self.last_user = user
         return self.reply

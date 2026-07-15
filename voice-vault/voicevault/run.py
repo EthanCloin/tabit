@@ -27,7 +27,7 @@ from . import taxonomy as tax_mod
 from . import transcribe as transcribe_mod
 from .backends import get_backend
 from .config import Config
-from .ledger import Ledger, hash_file
+from .ledger import Ledger, hash_file, hash_text
 from .linking import GraphReport
 from .synthesize import synthesize
 
@@ -46,12 +46,48 @@ class RunReport:
     graph: GraphReport | None = None   # populated by the post-synthesis linking pass
     committed: bool = False
 
+    # --- R2-T2 cost management -------------------------------------------------------------
+    tokens_input: int = 0     # aggregate input tokens reported by the backend this run
+    tokens_output: int = 0    # aggregate output tokens reported by the backend this run
+    skipped_notes: list[str] = field(default_factory=list)      # note titles the budget cap
+                                                                  # skipped mid-transcript
+    skipped_budget: list[Path] = field(default_factory=list)    # whole audio/transcripts the
+                                                                  # budget kill-switch skipped
+    skipped_unchanged: list[Path] = field(default_factory=list)  # skipped: fingerprint unchanged
+
+    @property
+    def tokens_total(self) -> int:
+        return self.tokens_input + self.tokens_output
+
 
 def _is_stable(path: Path, now: float) -> bool:
     try:
         return (now - path.stat().st_mtime) >= _STABILITY_SECONDS
     except OSError:
         return False
+
+
+def _control_fingerprint(cfg: Config, transcript: str) -> str:
+    """Hash of (transcript content + the control files synthesis actually reads).
+
+    Used by skip-unchanged (R2-T2): if this matches what was fingerprinted for the same
+    ``source_name`` last time, the transcript's content and every relevant control file are
+    byte-identical to the last synthesized run, so synthesis can be skipped safely. Reuses the
+    hashing pattern from :mod:`voicevault.ledger` (sha256 over utf-8 text).
+    """
+    control_paths = (
+        cfg.paths.synthesis_guide, cfg.paths.taxonomy, cfg.paths.dictionary,
+        cfg.paths.tags, cfg.paths.feedback,
+    )
+    parts = [transcript]
+    for p in control_paths:
+        parts.append(p.read_text(encoding="utf-8") if p.exists() else "")
+    return hash_text("\x00".join(parts))
+
+
+def _budget_exhausted(cfg: Config, report: RunReport) -> bool:
+    cap = cfg.synthesis.budget_max_tokens
+    return cap is not None and report.tokens_total >= cap
 
 
 def _discover(cfg: Config, explicit: list[Path] | None) -> list[Path]:
@@ -104,7 +140,18 @@ def _synthesize_and_evolve(backend, cfg: Config, transcript: str, ledger: Ledger
                            source_name: str, report: RunReport, *, log) -> None:
     """Synthesis + evolve step shared by ``run`` and ``resynth``: write/update notes for one
     transcript, then surface any proposed domains/lessons for human review."""
-    result = synthesize(backend, cfg, transcript, ledger, source_name=source_name)
+    cap = cfg.synthesis.budget_max_tokens
+    budget_remaining = (cap - report.tokens_total) if cap is not None else None
+    result = synthesize(
+        backend, cfg, transcript, ledger, source_name=source_name,
+        budget_remaining=budget_remaining,
+    )
+    report.tokens_input += result.tokens_input
+    report.tokens_output += result.tokens_output
+    if result.skipped_notes:
+        report.skipped_notes.extend(result.skipped_notes)
+        for title in result.skipped_notes:
+            log(f"  skip (budget exceeded): note {title!r}")
     for note in result.written:
         log(f"  note: {note.name}")
     report.notes_written.extend(result.written)
@@ -143,7 +190,15 @@ def _process_one(audio_path: Path, cfg: Config, backend, ledger: Ledger,
     transcript_path.write_text(transcript + "\n", encoding="utf-8")
 
     source_name = str(transcript_path.relative_to(cfg.paths.output_dir))
-    _synthesize_and_evolve(backend, cfg, transcript, ledger, source_name, report, log=log)
+    fingerprint = _control_fingerprint(cfg, transcript) if cfg.synthesis.skip_unchanged else None
+
+    if fingerprint is not None and ledger.fingerprint_matches(source_name, fingerprint):
+        log(f"  skip (unchanged transcript + control files): {audio_path.name}")
+        report.skipped_unchanged.append(audio_path)
+    else:
+        _synthesize_and_evolve(backend, cfg, transcript, ledger, source_name, report, log=log)
+        if fingerprint is not None:
+            ledger.set_fingerprint(source_name, fingerprint)
 
     ledger.record_audio(audio_hash, audio_path.name, transcript)
     ledger.save()
@@ -174,6 +229,13 @@ def run(cfg: Config, files: list[Path] | None = None, *, dry_run: bool = False,
             log(f"  skip (still syncing): {audio_path.name}")
             report.skipped.append(audio_path)
             continue
+        # Budget kill-switch: once the run's aggregate usage meets the cap, stop starting new
+        # work -- whatever was in flight already finished, remaining candidates are recorded as
+        # skipped and the run still exits cleanly (linking pass, commit, etc. still happen).
+        if not dry_run and _budget_exhausted(cfg, report):
+            log(f"  skip (budget exceeded): {audio_path.name}")
+            report.skipped_budget.append(audio_path)
+            continue
         log(f"Processing: {audio_path.name}")
         _process_one(audio_path, cfg, backend, ledger, entries, report,
                      dry_run=dry_run, log=log)
@@ -187,7 +249,7 @@ def run(cfg: Config, files: list[Path] | None = None, *, dry_run: bool = False,
         _commit(cfg, report, log=log)
 
     log(f"Done. {len(report.processed)} processed, {len(report.skipped)} skipped, "
-        f"{len(report.notes_written)} note(s) written.")
+        f"{len(report.notes_written)} note(s) written, {report.tokens_total} token(s) used.")
     return report
 
 
@@ -224,6 +286,10 @@ def resynth(cfg: Config, files: list[Path] | None = None, *, dry_run: bool = Fal
     change, and merge-with-preserve (via ``Ledger.is_hand_edited`` / ``set_app_hash`` inside
     :func:`~voicevault.synthesize.synthesize`) is what keeps re-running idempotent and
     non-destructive of human edits.
+
+    When ``[synthesis] skip_unchanged = true`` (R2-T2), each transcript is fingerprinted
+    against the same control files, and a `resynth` after an unrelated control-file edit skips
+    every transcript whose fingerprint still matches -- this is the main payoff of the feature.
     """
     cfg.ensure_dirs()
     ledger = Ledger.load(cfg.system_dir)
@@ -254,7 +320,27 @@ def resynth(cfg: Config, files: list[Path] | None = None, *, dry_run: bool = Fal
             source_name = str(transcript_path.relative_to(cfg.paths.output_dir))
         except ValueError:
             source_name = transcript_path.name
+
+        # Budget kill-switch (see `run()` for the same pattern): stop starting new resynths
+        # once the cap is hit, whatever was in flight already finished.
+        if _budget_exhausted(cfg, report):
+            log(f"  skip (budget exceeded): {transcript_path.name}")
+            report.skipped_budget.append(transcript_path)
+            continue
+
+        # Skip-unchanged: this is what makes `resynth` cheap after an unrelated control-file
+        # edit -- a transcript whose fingerprint (content + control files) hasn't changed since
+        # the last synthesized run doesn't get re-spent on.
+        fingerprint = _control_fingerprint(cfg, transcript) if cfg.synthesis.skip_unchanged else None
+        if fingerprint is not None and ledger.fingerprint_matches(source_name, fingerprint):
+            log(f"  skip (unchanged transcript + control files): {transcript_path.name}")
+            report.skipped_unchanged.append(transcript_path)
+            report.processed.append(transcript_path)
+            continue
+
         _synthesize_and_evolve(backend, cfg, transcript, ledger, source_name, report, log=log)
+        if fingerprint is not None:
+            ledger.set_fingerprint(source_name, fingerprint)
         report.processed.append(transcript_path)
 
     if not dry_run:
@@ -267,5 +353,6 @@ def resynth(cfg: Config, files: list[Path] | None = None, *, dry_run: bool = Fal
             _commit(cfg, report, unit_label="resynthesized transcript(s)", log=log)
 
     log(f"Done. {len(report.processed)} transcript(s) resynthesized, {len(report.skipped)} "
-        f"skipped, {len(report.notes_written)} note(s) written.")
+        f"skipped, {len(report.notes_written)} note(s) written, {report.tokens_total} "
+        f"token(s) used.")
     return report

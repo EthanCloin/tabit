@@ -42,6 +42,34 @@ class SynthesisResult:
     written: list[Path] = field(default_factory=list)
     proposed_domains: list[tax_mod.Domain] = field(default_factory=list)
     feedback_lessons: list[str] = field(default_factory=list)
+    tokens_input: int = 0
+    tokens_output: int = 0
+    skipped_notes: list[str] = field(default_factory=list)  # plan titles skipped by budget cap
+
+
+def _accumulate_usage(backend: SynthesisBackend, result: SynthesisResult) -> None:
+    """Fold the backend's usage from its most recent `complete()` call into the run total."""
+    usage = backend.last_usage
+    if usage is None:
+        return
+    result.tokens_input += usage.get("input_tokens", 0)
+    result.tokens_output += usage.get("output_tokens", 0)
+
+
+def route_model(cfg: Config, transcript: str) -> str:
+    """Pick a cheap-vs-strong model tier for a transcript by a simple length heuristic.
+
+    Both `cheap_model` and `strong_model` must be configured to opt in -- if either is unset,
+    this always returns `cfg.synthesis.model`, preserving today's behavior. Short/simple
+    transcripts (<= `routing_threshold_chars`) route to the cheap tier; longer ones to the
+    strong tier.
+    """
+    routing = cfg.synthesis
+    if not routing.cheap_model or not routing.strong_model:
+        return routing.model
+    if len(transcript) <= routing.routing_threshold_chars:
+        return routing.cheap_model
+    return routing.strong_model
 
 
 def _safe_title(title: str) -> str:
@@ -130,7 +158,8 @@ _PLAN_SYSTEM = (
 
 
 def _plan(backend: SynthesisBackend, cfg: Config, transcript: str,
-          domains: list[tax_mod.Domain], index: list[vault_context.NoteRef]) -> tuple[list[Plan], list[tax_mod.Domain]]:
+          domains: list[tax_mod.Domain], index: list[vault_context.NoteRef],
+          *, model: str | None = None) -> tuple[list[Plan], list[tax_mod.Domain]]:
     user = f"""TRANSCRIPT:
 {transcript}
 
@@ -152,7 +181,7 @@ Return JSON of this shape:
 Rules: use an existing title verbatim when updating. Only propose a domain when no defined
 domain fits. Prefer fewer, well-scoped notes over many thin ones."""
 
-    data = _extract_json(backend.complete(_PLAN_SYSTEM, user))
+    data = _extract_json(backend.complete(_PLAN_SYSTEM, user, model=model))
     plans = [
         Plan(
             title=_safe_title(n.get("title", "")),
@@ -183,7 +212,7 @@ _WRITE_SYSTEM = (
 def _write_note(backend: SynthesisBackend, cfg: Config, plan: Plan, transcript: str,
                 guide: str, examples: str, feedback: str, index: list[vault_context.NoteRef],
                 ledger: Ledger, *, tags_guide: str = "", source_name: str = "",
-                today: str | None = None) -> tuple[str, str | None]:
+                today: str | None = None, model: str | None = None) -> tuple[str, str | None]:
     note_path = cfg.notes_dir / f"{plan.title}.md"
     existing = note_path.read_text(encoding="utf-8") if note_path.exists() else ""
     hand_edited = ledger.is_hand_edited(note_path)
@@ -253,7 +282,7 @@ RELEVANT TRANSCRIPT:
 
 Write the finished markdown for "{plan.title}" now."""
 
-    raw = backend.complete(_WRITE_SYSTEM, user)
+    raw = backend.complete(_WRITE_SYSTEM, user, model=model)
 
     lesson = None
     match = _LESSON_RE.search(raw)
@@ -266,9 +295,18 @@ Write the finished markdown for "{plan.title}" now."""
 
 
 def synthesize(backend: SynthesisBackend, cfg: Config, transcript: str,
-               ledger: Ledger, source_name: str = "") -> SynthesisResult:
+               ledger: Ledger, source_name: str = "", *,
+               budget_remaining: int | None = None) -> SynthesisResult:
     """``source_name`` is the originating transcript's identifier (e.g. its path relative to
-    ``output_dir``), recorded verbatim into each written note's `source` frontmatter field."""
+    ``output_dir``), recorded verbatim into each written note's `source` frontmatter field.
+
+    ``budget_remaining``, when not None, is the number of tokens still available to this call
+    (the caller has already subtracted whatever prior transcripts in the same run spent). Once
+    this call's own usage meets or exceeds it, remaining planned notes are skipped gracefully
+    -- the note in progress always finishes -- and their titles land in
+    ``SynthesisResult.skipped_notes`` for the caller to surface. None (the default) means no
+    cap, matching pre-R2-T2 behavior.
+    """
     domains = tax_mod.parse_taxonomy(cfg.paths.taxonomy)
     index = vault_context.build_index(cfg)
     guide = _read_control(cfg.paths.synthesis_guide)
@@ -276,17 +314,25 @@ def synthesize(backend: SynthesisBackend, cfg: Config, transcript: str,
     tags_guide = _read_control(cfg.paths.tags)
     examples = _load_examples(cfg.paths.examples_dir)
     today = dt.date.today().isoformat()
+    model = route_model(cfg, transcript)
 
-    plans, proposed = _plan(backend, cfg, transcript, domains, index)
+    plans, proposed = _plan(backend, cfg, transcript, domains, index, model=model)
 
     result = SynthesisResult(proposed_domains=proposed)
+    _accumulate_usage(backend, result)
     cfg.notes_dir.mkdir(parents=True, exist_ok=True)
 
     for plan in plans:
+        spent = result.tokens_input + result.tokens_output
+        if budget_remaining is not None and spent >= budget_remaining:
+            result.skipped_notes.append(plan.title)
+            continue
+
         body, lesson = _write_note(
             backend, cfg, plan, transcript, guide, examples, feedback, index, ledger,
-            tags_guide=tags_guide, source_name=source_name, today=today,
+            tags_guide=tags_guide, source_name=source_name, today=today, model=model,
         )
+        _accumulate_usage(backend, result)
         if not body.strip():
             continue
         note_path = cfg.notes_dir / f"{plan.title}.md"

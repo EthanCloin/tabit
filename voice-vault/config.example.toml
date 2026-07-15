@@ -40,6 +40,23 @@ note_lifecycle = "evergreen"      # evergreen (merge-with-preserve) | append
 splitting      = "by_concept"     # by_concept | single
 ollama_host    = "http://localhost:11434"  # only used when backend = "ollama"
 
+# --- cost management (all opt-in; leave unset to keep today's behavior unchanged) ---
+# Model routing: route short/simple transcripts to a cheap model, longer ones to a strong one.
+# Both cheap_model and strong_model must be set to enable routing.
+# cheap_model  = "claude-haiku-4-5"
+# strong_model = "claude-opus-4-8"
+# routing_threshold_chars = 2000   # transcripts at/under this length use cheap_model
+
+# Budget cap + kill-switch: stop starting new work once this many tokens (input + output,
+# summed across the run) have been spent. The note/transcript in flight always finishes;
+# everything after that is recorded as skipped rather than processed.
+# budget_max_tokens = 200000
+
+# Skip-unchanged: fingerprint (transcript + control files) and skip re-synthesis when nothing
+# relevant has changed since the last run. Especially useful for `resynth` after an unrelated
+# control-file edit.
+# skip_unchanged = true
+
 [git]
 commit_each_run = true            # one commit per run in output_dir = audit trail
 include_audio   = false           # true -> also commit raw audio blobs (consider git-lfs)

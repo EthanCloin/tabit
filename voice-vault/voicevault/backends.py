@@ -15,13 +15,36 @@ from .config import Config
 
 
 class SynthesisBackend(ABC):
+    def __init__(self) -> None:
+        # Populated by complete() after each call; None until a call reports usage. Keys:
+        # "input_tokens", "output_tokens". This is the shared accessor R2-T2's token
+        # accounting reads from -- cheaper than threading a parallel return value through
+        # every call site, and keeps the `complete() -> str` contract unchanged for callers
+        # that don't care about cost.
+        self._last_usage: dict[str, int] | None = None
+
+    @property
+    def last_usage(self) -> dict[str, int] | None:
+        """Token usage from the most recent `complete()` call, or None if unavailable.
+
+        Falls back to None for subclasses (e.g. test fakes) that don't call
+        ``super().__init__()`` and so never set ``_last_usage``.
+        """
+        return getattr(self, "_last_usage", None)
+
     @abstractmethod
-    def complete(self, system: str, user: str) -> str:
-        """Return the model's text completion for a system + user prompt."""
+    def complete(self, system: str, user: str, *, model: str | None = None) -> str:
+        """Return the model's text completion for a system + user prompt.
+
+        ``model`` optionally overrides the backend's configured model for this call only
+        (used by cost-aware routing to send a cheap request without reconstructing the
+        backend). Backends default to their configured model when omitted.
+        """
 
 
 class ClaudeBackend(SynthesisBackend):
     def __init__(self, cfg: Config):
+        super().__init__()
         self.model = cfg.synthesis.model
         self._client = None
 
@@ -38,14 +61,20 @@ class ClaudeBackend(SynthesisBackend):
             self._client = anthropic.Anthropic()
         return self._client
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, *, model: str | None = None) -> str:
         client = self._get_client()
         resp = client.messages.create(
-            model=self.model,
+            model=model or self.model,
             max_tokens=4096,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            self._last_usage = {
+                "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+                "output_tokens": getattr(usage, "output_tokens", 0) or 0,
+            }
         return "".join(block.text for block in resp.content if block.type == "text").strip()
 
 
@@ -58,16 +87,18 @@ class OllamaBackend(SynthesisBackend):
     """
 
     def __init__(self, cfg: Config):
+        super().__init__()
         self.model = cfg.synthesis.model
         self.host = (cfg.synthesis.ollama_host or "http://localhost:11434").rstrip("/")
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, *, model: str | None = None) -> str:
         import json
         import urllib.error
         import urllib.request
 
+        effective_model = model or self.model
         payload = json.dumps(
-            {"model": self.model, "prompt": user, "system": system, "stream": False}
+            {"model": effective_model, "prompt": user, "system": system, "stream": False}
         ).encode("utf-8")
         req = urllib.request.Request(
             f"{self.host}/api/generate",
@@ -84,8 +115,8 @@ class OllamaBackend(SynthesisBackend):
             message = _extract_ollama_error(raw)
             if "not found" in message.lower():
                 raise RuntimeError(
-                    f"Ollama model '{self.model}' is not pulled on {self.host}. "
-                    f"Run `ollama pull {self.model}` and try again. (server said: {message})"
+                    f"Ollama model '{effective_model}' is not pulled on {self.host}. "
+                    f"Run `ollama pull {effective_model}` and try again. (server said: {message})"
                 ) from exc
             raise RuntimeError(
                 f"Ollama request to {self.host} failed ({exc.code}): {message}"
@@ -101,10 +132,14 @@ class OllamaBackend(SynthesisBackend):
             message = data["error"]
             if "not found" in message.lower():
                 raise RuntimeError(
-                    f"Ollama model '{self.model}' is not pulled on {self.host}. "
-                    f"Run `ollama pull {self.model}` and try again. (server said: {message})"
+                    f"Ollama model '{effective_model}' is not pulled on {self.host}. "
+                    f"Run `ollama pull {effective_model}` and try again. (server said: {message})"
                 )
             raise RuntimeError(f"Ollama returned an error: {message}")
+        self._last_usage = {
+            "input_tokens": data.get("prompt_eval_count", 0) or 0,
+            "output_tokens": data.get("eval_count", 0) or 0,
+        }
         return data.get("response", "").strip()
 
 

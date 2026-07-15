@@ -47,6 +47,22 @@ class SynthesisCfg:
     splitting: str = "by_concept"
     ollama_host: str = "http://localhost:11434"
 
+    # --- R2-T2 cost management (all opt-in; unset fields preserve current behavior) ---
+    # Model routing: cheap vs strong tier by transcript length. Both must be set to enable
+    # routing; leaving either unset keeps every call on `model` (today's behavior).
+    cheap_model: str | None = None
+    strong_model: str | None = None
+    routing_threshold_chars: int = 2000  # transcripts at/under this length route to cheap_model
+
+    # Budget cap + kill-switch: per-run token budget (input + output tokens summed across the
+    # backend's usage reports). None (default) means no cap is enforced.
+    budget_max_tokens: int | None = None
+
+    # Skip-unchanged: fingerprint (transcript + control files) and skip re-synthesis when
+    # unchanged since the last run. Off by default to keep `resynth`/`run` behavior identical
+    # when no cost config is set.
+    skip_unchanged: bool = False
+
 
 @dataclass
 class GitCfg:
