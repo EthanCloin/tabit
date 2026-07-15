@@ -73,6 +73,27 @@ promote or delete), and — when `git.commit_each_run` is set — makes one audi
 
 Already-processed recordings are content-hash deduped, so re-running is safe.
 
+## Fast loop — `resynth`
+
+After you edit a control file (dictionary/taxonomy/synthesis-guide/feedback/tags), re-run
+synthesis against transcripts you've **already** archived — without re-transcribing audio or
+loading whisper at all:
+
+```bash
+python -m voicevault resynth                 # re-synthesize every archived transcript
+python -m voicevault resynth rec1.txt         # just one (bare name, resolved against
+                                              # output_dir/_archive/transcripts/)
+python -m voicevault resynth --dry-run        # list transcripts + planned updates, write nothing
+```
+
+`resynth` reads straight from `output_dir/_archive/transcripts/*.txt` and re-runs the same
+synthesize + linking passes `run` uses, so it honors merge-with-preserve (a hand-edited note's
+lines are never dropped) and still proposes new domains/lessons for review. It deliberately does
+**not** consult the audio ledger (`_system/ledger.json`) — that dedupes by *audio* content-hash,
+which is irrelevant once you're iterating on already-transcribed text — so re-running it after a
+control-file tweak always updates notes, never gets skipped as a dup. It's the quick loop for
+tuning the control plane; use `run` when there's new audio to bring in.
+
 ## Steer it — the control files
 
 Everything lives in `config/`. Edit these, not the code:
