@@ -38,6 +38,7 @@ class Ledger:
     system_dir: Path
     _audio: dict = field(default_factory=dict)      # audio hash -> {name, transcript}
     _notes: dict = field(default_factory=dict)      # note relpath -> app-authored hash
+    _fingerprints: dict = field(default_factory=dict)  # source_name -> synthesis fingerprint
 
     @classmethod
     def load(cls, system_dir: str | Path) -> "Ledger":
@@ -45,10 +46,13 @@ class Ledger:
         led = cls(system_dir=system_dir)
         audio_p = system_dir / "ledger.json"
         notes_p = system_dir / "note-state.json"
+        fp_p = system_dir / "fingerprints.json"
         if audio_p.exists():
             led._audio = json.loads(audio_p.read_text(encoding="utf-8"))
         if notes_p.exists():
             led._notes = json.loads(notes_p.read_text(encoding="utf-8"))
+        if fp_p.exists():
+            led._fingerprints = json.loads(fp_p.read_text(encoding="utf-8"))
         return led
 
     def save(self) -> None:
@@ -58,6 +62,9 @@ class Ledger:
         )
         (self.system_dir / "note-state.json").write_text(
             json.dumps(self._notes, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        (self.system_dir / "fingerprints.json").write_text(
+            json.dumps(self._fingerprints, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
     # --- audio dedupe -------------------------------------------------------
@@ -86,3 +93,14 @@ class Ledger:
 
     def set_app_hash(self, note_path: Path, text: str) -> None:
         self._notes[self._key(note_path)] = hash_text(text)
+
+    # --- skip-unchanged (R2-T2) ----------------------------------------------
+    # Fingerprint = hash of (transcript content + relevant control files). Lets `run`/`resynth`
+    # skip re-spending on synthesis for a transcript that hasn't changed, and correctly
+    # reprocess it once a control file (synthesis-guide/taxonomy/dictionary/tags/feedback)
+    # changes -- this is what makes `resynth` cheap to run after an unrelated control-file edit.
+    def fingerprint_matches(self, source_name: str, fingerprint: str) -> bool:
+        return self._fingerprints.get(source_name) == fingerprint
+
+    def set_fingerprint(self, source_name: str, fingerprint: str) -> None:
+        self._fingerprints[source_name] = fingerprint

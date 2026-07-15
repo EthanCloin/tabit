@@ -23,7 +23,7 @@ class _RecordingBackend(SynthesisBackend):
         self.last_system: str | None = None
         self.last_user: str | None = None
 
-    def complete(self, system: str, user: str) -> str:
+    def complete(self, system: str, user: str, *, model: str | None = None) -> str:
         self.last_system = system
         self.last_user = user
         return "# Stub Note\n\nBody."
