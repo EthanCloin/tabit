@@ -22,6 +22,7 @@ dictionary      = "config/dictionary.md"
 taxonomy        = "config/taxonomy.md"
 synthesis_guide = "config/synthesis-guide.md"
 feedback        = "config/feedback.md"
+tags            = "config/tags.md"
 examples_dir    = "config/examples"
 
 [transcribe]

@@ -115,7 +115,8 @@ def _process_one(audio_path: Path, cfg: Config, backend, ledger: Ledger,
     shutil.copy2(audio_path, cfg.audio_archive / audio_path.name)
     transcript_path.write_text(transcript + "\n", encoding="utf-8")
 
-    result = synthesize(backend, cfg, transcript, ledger)
+    source_name = str(transcript_path.relative_to(cfg.paths.output_dir))
+    result = synthesize(backend, cfg, transcript, ledger, source_name=source_name)
     for note in result.written:
         log(f"  note: {note.name}")
     report.notes_written.extend(result.written)

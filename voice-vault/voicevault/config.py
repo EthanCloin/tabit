@@ -25,6 +25,7 @@ class Paths:
     taxonomy: Path
     synthesis_guide: Path
     feedback: Path
+    tags: Path
     examples_dir: Path
 
 
@@ -122,6 +123,7 @@ def load_config(config_path: str | Path) -> Config:
         taxonomy=_resolve(base, p.get("taxonomy", "config/taxonomy.md")),
         synthesis_guide=_resolve(base, p.get("synthesis_guide", "config/synthesis-guide.md")),
         feedback=_resolve(base, p.get("feedback", "config/feedback.md")),
+        tags=_resolve(base, p.get("tags", "config/tags.md")),
         examples_dir=_resolve(base, p.get("examples_dir", "config/examples")),
     )
 
