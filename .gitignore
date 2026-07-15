@@ -6,3 +6,6 @@ sample_vault/*
 # Not shipping these yet.
 .agents/
 skills-lock.json
+
+# lavish-axi's generated HTML review artifacts — build output, not source.
+.lavish/
