@@ -13,6 +13,7 @@ Two passes:
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 from dataclasses import dataclass, field
@@ -65,6 +66,47 @@ def _extract_json(text: str) -> dict:
 
 def _read_control(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+# --- Frontmatter determinism ------------------------------------------------
+#
+# `created` and `source` are computed by the app, not left to the model, so that an update pass
+# never introduces churn in fields the human didn't actually change. The model is told to copy
+# these values verbatim; everything it writes (including the copied values) still goes through
+# the normal set_app_hash(note_path, body) call below, so hand-edit detection keeps comparing
+# against exactly what was written -- these helpers only make *what's written* deterministic
+# across runs with no human edits in between.
+
+_FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---", re.DOTALL)
+
+
+def _frontmatter_field(text: str, field_name: str) -> str | None:
+    """Best-effort, verbatim extraction of a scalar frontmatter field's raw value."""
+    match = _FRONTMATTER_RE.match(text.lstrip("\n"))
+    if not match:
+        return None
+    for line in match.group(1).splitlines():
+        key, sep, rest = line.partition(":")
+        if sep and key.strip() == field_name:
+            return rest.strip()
+    return None
+
+
+def _merge_source(existing_value: str | None, new_name: str) -> str:
+    """Fold ``new_name`` into an existing `source` field's value, deduped, order-preserved."""
+    names: list[str] = []
+    if existing_value:
+        inner = existing_value.strip()
+        if inner.startswith("[") and inner.endswith("]"):
+            inner = inner[1:-1]
+        names = [n.strip().strip('"').strip("'") for n in inner.split(",") if n.strip()]
+    if new_name and new_name not in names:
+        names.append(new_name)
+    if not names:
+        return new_name
+    if len(names) == 1:
+        return names[0]
+    return "[" + ", ".join(names) + "]"
 
 
 def _load_examples(examples_dir: Path, limit: int = 3, budget: int = 6000) -> str:
@@ -140,10 +182,16 @@ _WRITE_SYSTEM = (
 
 def _write_note(backend: SynthesisBackend, cfg: Config, plan: Plan, transcript: str,
                 guide: str, examples: str, feedback: str, index: list[vault_context.NoteRef],
-                ledger: Ledger) -> tuple[str, str | None]:
+                ledger: Ledger, *, tags_guide: str = "", source_name: str = "",
+                today: str | None = None) -> tuple[str, str | None]:
     note_path = cfg.notes_dir / f"{plan.title}.md"
     existing = note_path.read_text(encoding="utf-8") if note_path.exists() else ""
     hand_edited = ledger.is_hand_edited(note_path)
+
+    # Deterministic frontmatter values: computed here, not by the model, so an update with no
+    # human edit in between never perturbs `created`/`source` and produces spurious diffs.
+    created_value = _frontmatter_field(existing, "created") or today or dt.date.today().isoformat()
+    source_value = _merge_source(_frontmatter_field(existing, "source"), source_name)
 
     if existing and hand_edited:
         lifecycle = (
@@ -168,6 +216,9 @@ def _write_note(backend: SynthesisBackend, cfg: Config, plan: Plan, transcript: 
 
 {ofm_reference}
 
+TAG VOCABULARY (tags.md — pick 1-3 "category/value" tags from here only, never invent one):
+{tags_guide or "(none provided)"}
+
 ACTIVE FEEDBACK LESSONS (obey these):
 {feedback}
 
@@ -181,6 +232,16 @@ DOMAIN: {plan.domain}
 NOTE TITLE: {plan.title}
 
 {lifecycle}
+
+FRONTMATTER YOU MUST EMIT (per the style guide's Frontmatter section): open the note with a
+YAML frontmatter block containing `domain`, `tags`, `aliases`, `source`, `created`, and
+`related`. Two of these fields are computed by the app -- copy them verbatim, do not compute
+your own value or alter them in any way:
+  created: {created_value}
+  source: {source_value}
+Choose `domain`, `tags`, `aliases`, and `related` yourself, following the style guide and the
+tag vocabulary above. Use at least one `> [!definition]` or `> [!insight]` callout somewhere
+in the body.
 
 CURRENT CONTENT OF THE NOTE (empty if new):
 ---
@@ -205,12 +266,16 @@ Write the finished markdown for "{plan.title}" now."""
 
 
 def synthesize(backend: SynthesisBackend, cfg: Config, transcript: str,
-               ledger: Ledger) -> SynthesisResult:
+               ledger: Ledger, source_name: str = "") -> SynthesisResult:
+    """``source_name`` is the originating transcript's identifier (e.g. its path relative to
+    ``output_dir``), recorded verbatim into each written note's `source` frontmatter field."""
     domains = tax_mod.parse_taxonomy(cfg.paths.taxonomy)
     index = vault_context.build_index(cfg)
     guide = _read_control(cfg.paths.synthesis_guide)
     feedback = _read_control(cfg.paths.feedback)
+    tags_guide = _read_control(cfg.paths.tags)
     examples = _load_examples(cfg.paths.examples_dir)
+    today = dt.date.today().isoformat()
 
     plans, proposed = _plan(backend, cfg, transcript, domains, index)
 
@@ -219,7 +284,8 @@ def synthesize(backend: SynthesisBackend, cfg: Config, transcript: str,
 
     for plan in plans:
         body, lesson = _write_note(
-            backend, cfg, plan, transcript, guide, examples, feedback, index, ledger
+            backend, cfg, plan, transcript, guide, examples, feedback, index, ledger,
+            tags_guide=tags_guide, source_name=source_name, today=today,
         )
         if not body.strip():
             continue

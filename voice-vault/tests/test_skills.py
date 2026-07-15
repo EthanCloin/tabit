@@ -38,6 +38,7 @@ def _make_cfg(tmp_path: Path) -> Config:
         taxonomy=tmp_path / "taxonomy.md",
         synthesis_guide=tmp_path / "synthesis-guide.md",
         feedback=tmp_path / "feedback.md",
+        tags=tmp_path / "tags.md",
         examples_dir=tmp_path / "examples",
     )
     return Config(

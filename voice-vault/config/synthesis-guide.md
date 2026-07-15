@@ -45,3 +45,46 @@ is read on every run and is the main lever (alongside `examples/`) for steering 
   a note doesn't fit neatly — propose one only when nothing existing genuinely fits.
 - Prefer growing a domain's links (and, eventually, a Map of Content the user builds) over
   tagging as a note collection grows — tags fragment; links compound.
+
+## Frontmatter (every note, no exceptions)
+
+Every note opens with a YAML frontmatter block, before any prose. It's part of the
+app-authored content — treat it as seriously as the body; it's what hand-edit detection hashes.
+
+```yaml
+---
+domain: <the one taxonomy.md domain this note is filed into>
+tags: [<1-3 values from tags.md as "category/value" nested tags, never invented>]
+aliases: [<alternate names this note should also resolve [[wikilinks]] under, if any>]
+source: <the transcript filename(s) this note was synthesized or last updated from>
+created: <the date given to you for this field — copy it verbatim, never compute your own>
+related:
+  - "[[Some Other Note]]"
+---
+```
+
+- `tags` — pull only from the categories/values in `tags.md`. If nothing genuinely fits, leave
+  the list short rather than invent a value; a bounded vocabulary is more valuable than a
+  complete one.
+- `aliases` — only add entries that are real alternate names people would search for or link
+  with; don't pad it.
+- `source` — the transcript path(s) you were given for this note; on an update, append the new
+  transcript rather than replacing the old one(s), so the field accumulates provenance.
+- `created` — **always copy the value you're given for this field verbatim.** The app computes
+  it (today's date for a new note, the note's existing `created` value when updating one) so
+  that unrelated updates never touch it and hand-edit detection never sees spurious churn on a
+  field you didn't actually change.
+- `related` — the same concepts you're already linking to in the body via `[[wikilinks]]`,
+  duplicated here as a scannable list for graph-view. Every `related` entry should also appear
+  as a `[[wikilink]]` somewhere in the body (and vice versa, where reasonable) — don't maintain
+  two divergent link sets.
+
+## Callouts & inline tags
+
+- Use an Obsidian callout for the note's canonical definition and for any key takeaway worth
+  surfacing at a glance — `> [!definition]` for "what this thing is" in one tight paragraph,
+  `> [!insight]` for a hard-won realization or gotcha. Don't wrap the whole note in callouts;
+  reserve them for the one or two things worth visually distinguishing.
+- Inline `#tags` in the body are sparing seasoning, not a second tagging system — the frontmatter
+  `tags` field is the source of truth for graph-view. Use an inline tag only when marking a
+  specific passage (e.g. `#todo`), still drawn from `tags.md`'s vocabulary.
