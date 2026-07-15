@@ -34,8 +34,19 @@ autonomously; it only describes how to do the work well once the user has asked 
 When the user has asked for a roadmap/round of work:
 1. Work the current roadmap from the plan file / open issues.
 2. Create issues (respect the backlog cap), dispatch subagents (respect the concurrency cap),
-   branch + PR per ticket, stacked on the integration branch to respect dependencies.
+   branch + PR per ticket.
 3. Record outcomes (PR URLs) in the plan file and `CLAUDE.md`.
+
+**Delivery — stacked PRs, no auto-merge (learned Round 1):** the environment blocks an agent
+from merging a subagent's PR without human review — don't try. Instead STACK: dependent
+ticket branches off its predecessor's `ticket/<n>` branch and its PR targets that branch, so
+each ticket inherits prior work while every PR stays open for the human to review and merge in
+order. Independent tickets branch off the integration branch. The main line is linear
+(`night-shift ← 1 ← 2 ← 3 ← 4`), with independent tickets hanging off `night-shift`.
+
+**Sequential dispatch (shared checkout):** subagents launched without worktree isolation share
+one working tree, so running two concurrently corrupts each other's `git checkout`. Dispatch
+one at a time in dependency order (or give each its own worktree if parallelizing later).
 
 Deciding *whether* to start another round, and what it contains, is a user-facing decision:
 follow the user's standing instruction if they gave one, otherwise check in.

@@ -39,15 +39,21 @@ tag facets, hub/MOC notes, and **no orphan notes**.
   into the prompt**, not assumed auto-loaded.
 - Use the latest Claude model ids (e.g. `claude-opus-4-8`) where the backend selects models.
 
-## Delivery model — branch + PR per ticket
-1. Branch off the base the orchestrator gives you (usually the integration branch, so you
-   inherit prior tickets' work); name it `ticket/<n>-<slug>`.
+## Delivery model — branch + PR per ticket (stacked)
+1. Branch off the **exact base the orchestrator names** (often a predecessor `ticket/<n>`
+   branch, not `main` — dependent tickets STACK so they inherit prior work without waiting
+   for a merge). Name your branch `ticket/<n>-<slug>`, and target that same base in your PR
+   (`gh pr create --base <that-branch>`). PRs are **never auto-merged** — the human reviews
+   and merges them, so keep each PR's diff scoped to just your ticket.
 2. Implement to the issue's acceptance criteria. Match the surrounding code style.
-3. Add/adjust **unit tests**; keep changes tight and reviewable.
-4. **Verify** — full audio runs are NOT possible here (no venv/ffmpeg/whisper/API budget).
-   So verify with: `python -m voicevault ... --dry-run`, unit tests (`pytest` if present,
-   else `python -m pytest` after adding), and `python -c "import voicevault.<mod>"` import
-   checks. Paste the actual results into the PR.
+3. Add/adjust **unit tests**; keep changes tight and reviewable. If you add a required field
+   to a shared dataclass (e.g. `Config.paths`), update prior tickets' fixtures/tests on the
+   branch so the whole suite stays green.
+4. **Verify** — full audio/API runs are NOT possible here (no ffmpeg/whisper model/API key).
+   `pip` may be unavailable: bootstrap a throwaway venv with `python -m venv` (+ bundled pip
+   wheel) solely to run `pytest`. Verify with unit tests, `python -m voicevault ... --dry-run`,
+   and `python -c "import voicevault.<mod>"` import checks (these confirm lazy-import
+   discipline: imports must work with zero heavy deps installed). Paste actual results in the PR.
 5. Commit with trailer:
    `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
 6. Push and open a PR with `gh pr create`; body ends with:
