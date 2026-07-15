@@ -2,3 +2,7 @@
 # Only the directory itself is tracked (via .gitkeep); everything a developer drops in stays local.
 sample_vault/*
 !sample_vault/.gitkeep
+
+# Not shipping these yet.
+.agents/
+skills-lock.json
