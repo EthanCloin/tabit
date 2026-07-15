@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voice-vault"
+version = "0.1.0"
+description = "Voice-fed knowledge vault: transcribe recordings locally and synthesize cross-linked Obsidian-style notes, steered by plain-text control files."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Ethan Cloin" }]
+dependencies = [
+    "faster-whisper>=1.0",
+    "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+# Local synthesis backend (stub today; see voicevault/backends.py).
+ollama = ["ollama>=0.3"]
+
+[project.scripts]
+# Primary invocation is `python -m voicevault`, but this console script works too.
+voice-vault = "voicevault.__main__:main"
+
+[tool.setuptools]
+packages = ["voicevault"]

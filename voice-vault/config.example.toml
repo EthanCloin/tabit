@@ -1,0 +1,40 @@
+# voice-vault configuration.
+# Copy this file to `config.toml` next to it and edit the paths.
+# Relative control-file paths resolve against this config file's directory.
+
+[paths]
+# ONE folder the app reads audio from. Treated read-only (never written to).
+# Point Obsidian's mobile recorder attachment location here.
+audio_src = "/absolute/path/to/Vault/_voice-inbox"
+
+# Everything the app writes lives under here (notes, transcripts, archive, system state).
+output_dir = "/absolute/path/to/Vault/Voice Notes"
+
+# OPTIONAL read-only folder of existing notes to link into (e.g. your whole vault).
+# Omit to run fully decoupled — links then resolve only among voice-vault's own notes.
+# link_context_dir = "/absolute/path/to/Vault"
+
+# User-owned control files (the heart of "I steer it").
+dictionary      = "config/dictionary.md"
+taxonomy        = "config/taxonomy.md"
+synthesis_guide = "config/synthesis-guide.md"
+feedback        = "config/feedback.md"
+examples_dir    = "config/examples"
+
+[transcribe]
+model        = "distil-large-v3"  # English-only, near-large-v3 accuracy, fast. Or "large-v3".
+audio_glob   = "*.m4a"            # Obsidian's default recording format.
+language     = "en"
+device       = "auto"             # auto | cpu | cuda
+compute_type = "default"          # default | int8 | float16 | ...
+vad          = true               # voice-activity detection trims silence
+
+[synthesis]
+backend        = "claude"         # claude | ollama (ollama is a stub — see backends.py)
+model          = "claude-opus-4-8"
+note_lifecycle = "evergreen"      # evergreen (merge-with-preserve) | append
+splitting      = "by_concept"     # by_concept | single
+
+[git]
+commit_each_run = true            # one commit per run in output_dir = audit trail
+include_audio   = false           # true -> also commit raw audio blobs (consider git-lfs)

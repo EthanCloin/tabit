@@ -1,0 +1,260 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :where(.grid, .flex) > * { min-width: 0; }
+  :where(p, h1, h2, h3, h4, li, dd, td, th, .badge, code) { overflow-wrap: anywhere; }
+  :where(img, svg) { max-width: 100%; height: auto; }
+  .vv-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .vv-diagram svg { width: 100%; height: auto; }
+</style>
+
+<div data-theme="luxury" class="min-h-screen bg-base-200 text-base-content">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-10">
+
+    <!-- Header -->
+    <header class="space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="badge badge-primary badge-lg">Technical Plan</span>
+        <span class="badge badge-soft">Status: approved · ready to scaffold</span>
+      </div>
+      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight">voice-vault</h1>
+      <p class="text-lg text-base-content/80 max-w-3xl">
+        A standalone, folder-agnostic Python app whose primary input is <strong>voice recordings</strong>.
+        It watches a folder of audio, transcribes locally, and synthesizes the content into structured,
+        cross-linked Obsidian-style markdown — <strong>steered by plain-text control files you edit, not code.</strong>
+      </p>
+    </header>
+
+    <!-- Key decisions -->
+    <section class="space-y-4">
+      <h2 class="text-xl font-semibold">Decisions locked this session</h2>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div class="card card-border bg-base-100"><div class="card-body p-5">
+          <h3 class="card-title text-base">Build location</h3>
+          <p class="text-sm text-base-content/80">Scaffold locally in <code class="vv-mono">/privec/tabit</code>. You attach a private GitHub remote separately while scaffolding runs.</p>
+        </div></div>
+        <div class="card card-border bg-base-100"><div class="card-body p-5">
+          <h3 class="card-title text-base">Folder-agnostic</h3>
+          <p class="text-sm text-base-content/80">No vault hard-wired. Wire a real vault into <code class="vv-mono">config.toml</code> at the end. Candidate: <code class="vv-mono">SoftwareDevKnowledge_OV</code>.</p>
+        </div></div>
+        <div class="card card-border bg-base-100"><div class="card-body p-5">
+          <h3 class="card-title text-base">Seeded control files</h3>
+          <p class="text-sm text-base-content/80">Starter dictionary / taxonomy entries drawn from your existing <code class="vv-mono">SoftwareDevKnowledge_OV</code> notes.</p>
+        </div></div>
+        <div class="card card-border bg-base-100"><div class="card-body p-5">
+          <h3 class="card-title text-base">Local-first transcription</h3>
+          <p class="text-sm text-base-content/80"><code class="vv-mono">faster-whisper</code> · <code class="vv-mono">distil-large-v3</code> · English · VAD on. Synthesis via Claude (swappable backend).</p>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- Pipeline diagram -->
+    <section class="space-y-4">
+      <h2 class="text-xl font-semibold">How a recording becomes a note</h2>
+      <p class="text-sm text-base-content/70">The 4-stage pipeline. Source audio is always treated read-only; every write lands under <code class="vv-mono">output_dir</code>.</p>
+      <div class="card card-border bg-base-100"><div class="card-body vv-diagram">
+        <pre class="mermaid">
+flowchart TD
+    A["🎙️ Capture<br/>recording lands in _voice-inbox/<br/>(read-only, hash-dedupe, stability wait)"] --> B
+    B["📝 Transcribe<br/>faster-whisper, dictionary-biased<br/>then alias → canonical normalize"] --> C
+    C["🧠 Synthesize<br/>transcript + taxonomy + guide + link-index<br/>→ concept notes w/ [[wikilinks]]"] --> D
+    D["🌱 Evolve<br/>new domains PROPOSED to taxonomy<br/>(never silently invented)"]
+    DICT["📖 dictionary.md"] -.biases.-> B
+    TAX["🗂️ taxonomy.md"] -.constrains.-> C
+    GUIDE["✍️ synthesis-guide.md"] -.formats.-> C
+    D -.human review.-> TAX
+        </pre>
+      </div></div>
+    </section>
+
+    <!-- Control files -->
+    <section class="space-y-4">
+      <h2 class="text-xl font-semibold">The three control files you own</h2>
+      <p class="text-sm text-base-content/70">Plain markdown in <code class="vv-mono">config/</code>. Human- and machine-readable — behavior is refined by editing these, not the code.</p>
+      <div class="grid md:grid-cols-3 gap-4">
+        <div class="card card-border bg-base-100"><div class="card-body p-5 space-y-2">
+          <h3 class="card-title text-base"><code class="vv-mono">dictionary.md</code></h3>
+          <p class="text-sm text-base-content/80">Builds whisper <code class="vv-mono">hotwords</code>/<code class="vv-mono">initial_prompt</code> so custom terms transcribe right; normalizes aliases → canonical.</p>
+          <div class="text-xs vv-mono bg-base-200 text-base-content rounded-box p-3 overflow-x-auto whitespace-pre">DDD | domain driven design
+    — Domain-Driven Design</div>
+        </div></div>
+        <div class="card card-border bg-base-100"><div class="card-body p-5 space-y-2">
+          <h3 class="card-title text-base"><code class="vv-mono">taxonomy.md</code></h3>
+          <p class="text-sm text-base-content/80">Defines the domains synthesis files into; a <code class="vv-mono">## Proposed</code> section collects model suggestions for review.</p>
+          <div class="text-xs vv-mono bg-base-200 text-base-content rounded-box p-3 overflow-x-auto whitespace-pre">## Software
+Systems, patterns, tooling.
+e.g. [[Domain-Driven Design]]</div>
+        </div></div>
+        <div class="card card-border bg-base-100"><div class="card-body p-5 space-y-2">
+          <h3 class="card-title text-base"><code class="vv-mono">synthesis-guide.md</code></h3>
+          <p class="text-sm text-base-content/80">Categorize/link/format rules, shared with the interactive skill.</p>
+          <div class="text-xs vv-mono bg-base-200 text-base-content rounded-box p-3 overflow-x-auto whitespace-pre">- prefer [[wikilinks]]
+- split by concept
+- evergreen, imitate my voice</div>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- Layout + Config side by side -->
+    <section class="grid lg:grid-cols-2 gap-4">
+      <div class="card card-border bg-base-100"><div class="card-body p-5">
+        <h3 class="card-title text-base">Package layout (in <code class="vv-mono">tabit/</code>)</h3>
+        <div class="mockup-code text-xs">
+<pre><code>voice-vault/
+├── README.md  pyproject.toml
+├── config.example.toml   .gitignore
+├── config/
+│   ├── dictionary.md
+│   ├── taxonomy.md
+│   ├── synthesis-guide.md
+│   ├── feedback.md     # lessons from past runs
+│   └── examples/       # gold-standard notes
+├── voicevault/
+│   ├── config.py       # load + path-guard
+│   ├── dictionary.py   # hotwords + normalizer
+│   ├── transcribe.py   # faster-whisper
+│   ├── taxonomy.py     # domains + proposals
+│   ├── vault_context.py# link indexer
+│   ├── backends.py     # Claude / Ollama stub
+│   ├── synthesize.py   # write/update notes
+│   ├── ledger.py       # hash dedupe
+│   ├── run.py          # orchestrate + commit
+│   └── __main__.py     # python -m voicevault
+└── .claude/skills/
+    ├── synthesize-note/
+    └── evolve-taxonomy/</code></pre>
+        </div>
+      </div></div>
+      <div class="card card-border bg-base-100"><div class="card-body p-5">
+        <h3 class="card-title text-base"><code class="vv-mono">config.toml</code> sketch</h3>
+        <div class="mockup-code text-xs">
+<pre><code>[paths]
+audio_src   = ".../_voice-inbox"  # ONE folder
+output_dir  = ".../Voice Notes"
+link_context_dir = "..."   # optional
+
+[transcribe]
+model    = "distil-large-v3"
+audio_glob = "*.m4a"       # Obsidian default
+language = "en"
+device   = "auto"
+vad      = true
+
+[synthesis]
+backend = "claude"
+note_lifecycle = "evergreen"
+splitting = "by_concept"
+
+[git]
+commit_each_run = true</code></pre>
+        </div>
+        <p class="text-xs text-base-content/70 mt-2">Output tree: <code class="vv-mono">_archive/{audio,transcripts}</code>, <code class="vv-mono">notes/</code>, <code class="vv-mono">_system/</code>. All writes under <code class="vv-mono">output_dir</code>; <code class="vv-mono">link_context_dir</code> read-only; overlap guard forbids collisions.</p>
+      </div></div>
+    </section>
+
+    <!-- Verification -->
+    <section class="space-y-4">
+      <h2 class="text-xl font-semibold">How we'll verify it end-to-end</h2>
+      <ul class="steps steps-vertical w-full">
+        <li class="step step-primary"><span class="text-sm text-left"><code class="vv-mono">python -m voicevault run &lt;file.m4a&gt;</code> → audio archived, verbatim transcript, concept note(s) in defined domains, resolving <code class="vv-mono">[[wikilinks]]</code>, one git commit, source untouched.</span></li>
+        <li class="step step-primary"><span class="text-sm text-left">Add a made-up acronym to <code class="vv-mono">dictionary.md</code>, record it, confirm it lands correctly <strong>in the final note</strong> (bias + normalize — see the mechanism note below).</span></li>
+        <li class="step step-primary"><span class="text-sm text-left">Point <code class="vv-mono">audio_src</code> at a plain folder with no Obsidian vault → still runs; links resolve among its own notes (folder-agnostic).</span></li>
+        <li class="step step-primary"><span class="text-sm text-left">Open <code class="vv-mono">output_dir</code> in Obsidian → links + backlinks resolve; re-run on a saved transcript to iterate without re-recording.</span></li>
+      </ul>
+      <div role="alert" class="alert alert-soft mt-2"><span class="text-sm"><strong>Mechanism &amp; honesty on acronyms:</strong> whisper doesn't hard-match your written words. <code class="vv-mono">dictionary.md</code> feeds <code class="vv-mono">hotwords</code>/<code class="vv-mono">initial_prompt</code> — the terms go into the decoder's context and <em>raise the prior probability</em> of that spelling/casing. It's <strong>soft biasing, not a guarantee</strong>: great for casing &amp; homophones, shakier for a brand-new acronym spoken as letters. That's why there are <strong>two more layers</strong>: a deterministic <code class="vv-mono">alias → canonical</code> normalize pass, and the synthesis LLM (which also sees the dictionary) correcting in context. The three layers together are what make the term reliably correct in the final note.</span></div>
+    </section>
+
+    <!-- Refinement cycle -->
+    <section class="space-y-5">
+      <div>
+        <h2 class="text-xl font-semibold">The refinement cycle — how you steer output</h2>
+        <p class="text-sm text-base-content/70 max-w-3xl mt-1">The whole point: guide the pipeline toward the notes <em>you</em> want without touching code. Three things make that loop tight — a cheap iteration path, a richer control plane than "just three files," and the right model for the reasoning.</p>
+      </div>
+
+      <!-- Fast loop -->
+      <div class="card card-border bg-base-100"><div class="card-body p-5 space-y-2">
+        <h3 class="card-title text-base">1 · The fast loop — re-synthesize from saved transcripts</h3>
+        <p class="text-sm text-base-content/80">Because the <strong>verbatim transcript is archived</strong>, synthesis is replayable. You don't re-record or re-transcribe to iterate:</p>
+        <div class="text-sm bg-base-200 rounded-box p-3 vv-mono overflow-x-auto">edit a control file → <span class="text-primary">python -m voicevault resynth &lt;transcript&gt;</span> → diff the note → repeat</div>
+        <p class="text-xs text-base-content/60">Seconds per iteration, near-zero cost (small transcripts), no audio reprocessing. This is where you'll spend most steering effort.</p>
+      </div></div>
+
+      <!-- Control plane -->
+      <div class="space-y-3">
+        <h3 class="text-base font-semibold">2 · The control plane — is markdown enough?</h3>
+        <p class="text-sm text-base-content/80 max-w-3xl"><strong>Mostly yes — with two additions.</strong> Markdown is excellent for declarative vocab, structure, and style rules. What it can't express well is <em>"sound like this"</em> and <em>"stop doing that."</em> So the control plane is <strong>five</strong> markdown surfaces, not three:</p>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div class="card card-border bg-base-100"><div class="card-body p-4"><h4 class="font-semibold text-sm">dictionary.md</h4><p class="text-xs text-base-content/70">Vocab: spelling, acronyms, alias → canonical.</p></div></div>
+          <div class="card card-border bg-base-100"><div class="card-body p-4"><h4 class="font-semibold text-sm">taxonomy.md</h4><p class="text-xs text-base-content/70">Structure: the domains notes get filed into.</p></div></div>
+          <div class="card card-border bg-base-100"><div class="card-body p-4"><h4 class="font-semibold text-sm">synthesis-guide.md</h4><p class="text-xs text-base-content/70">Rules: style, linking, split-by-concept, evergreen.</p></div></div>
+          <div class="card card-border bg-primary/10 border-primary/40"><div class="card-body p-4"><h4 class="font-semibold text-sm">examples/ <span class="badge badge-primary badge-xs align-middle">new</span></h4><p class="text-xs text-base-content/70">Hand-curated gold-standard notes fed as <strong>few-shot anchors</strong> — the single strongest lever for matching your voice.</p></div></div>
+          <div class="card card-border bg-primary/10 border-primary/40"><div class="card-body p-4"><h4 class="font-semibold text-sm">feedback.md <span class="badge badge-primary badge-xs align-middle">new</span></h4><p class="text-xs text-base-content/70">A running "lessons" log ("too verbose", "prefer H2 over bullets") the synthesis prompt reads each run.</p></div></div>
+          <div class="card card-border bg-base-100"><div class="card-body p-4"><h4 class="font-semibold text-sm">…direct note edits</h4><p class="text-xs text-base-content/70">Evergreen merge preserves your hand-edits on the next update (a real design rule, see risks).</p></div></div>
+        </div>
+      </div>
+
+      <!-- Local vs cloud -->
+      <div class="space-y-3">
+        <h3 class="text-base font-semibold">3 · Local vs cloud LLM — can local models handle this?</h3>
+        <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100">
+          <table class="table table-sm">
+            <thead><tr><th>Job</th><th>Local (Ollama)</th><th>Cloud (Claude)</th><th>Call</th></tr></thead>
+            <tbody>
+              <tr><td class="font-medium">Transcription</td><td>✅ <code class="vv-mono">faster-whisper</code>, fully local &amp; private</td><td>—</td><td><span class="badge badge-success badge-sm">Local (already)</span></td></tr>
+              <tr><td class="font-medium">Synthesis quality</td><td>7–14B (consumer HW): format drift, weak note-splitting &amp; link discipline. 32–70B on strong HW: usable.</td><td>Reliable splitting, taxonomy adherence, style imitation, clean <code class="vv-mono">[[wikilinks]]</code>.</td><td><span class="badge badge-primary badge-sm">Cloud now</span></td></tr>
+              <tr><td class="font-medium">Cost</td><td>Free (electricity)</td><td>Cents/recording — transcripts are small (~few K tokens)</td><td>Negligible</td></tr>
+              <tr><td class="font-medium">Privacy</td><td>Nothing leaves the machine</td><td>Transcript text sent to Anthropic</td><td>Your call</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div role="alert" class="alert alert-info alert-soft"><span class="text-sm"><strong>Recommendation:</strong> start on <strong>Claude</strong> to set the quality bar and iterate the control files against a strong model — the backend stays swappable (<code class="vv-mono">OllamaBackend</code> is a stub from day one). A mature control plane (guide + examples + feedback) is exactly what lets a local 32B+ model catch up later, so the markdown investment is also your migration path off the cloud. If privacy is the priority <em>now</em>, say so and I'll wire the Ollama backend live instead of stubbing it.</span></div>
+      </div>
+    </section>
+
+    <!-- Risks / open questions -->
+    <section class="space-y-4">
+      <h2 class="text-xl font-semibold">Remaining open defaults to annotate</h2>
+      <div class="space-y-3">
+        <div role="alert" class="alert alert-warning alert-soft"><span><strong>Audio blobs in git.</strong> Default: <code class="vv-mono">.gitignore</code> the <code class="vv-mono">_archive/audio/</code> folder (keep folder, drop blobs); transcripts + notes always committed. Flag if you'd rather version raw audio via git-lfs.</span></div>
+        <div role="alert" class="alert alert-warning alert-soft"><span><strong>Whisper model default.</strong> <code class="vv-mono">distil-large-v3</code> (English-only, fast) vs <code class="vv-mono">large-v3</code> (one config value). Acceptable as the starting default?</span></div>
+        <div role="alert" class="alert alert-info alert-soft"><span><strong>Evergreen vs your hand-edits.</strong> When you edit a note by hand and the same concept recurs, should the next run <em>merge into</em> your version, or append a dated block below it? (Leaning merge-with-preserve.)</span></div>
+      </div>
+      <p class="text-sm text-base-content/60">✅ Resolved this round: single <code class="vv-mono">audio_src</code> folder + <code class="vv-mono">.m4a</code>; on-demand <code class="vv-mono">python -m voicevault</code> (CLI + cron/watch deferred); acronym mechanism documented. Annotate anything above, or say <strong>build</strong> and I'll stand up the scaffold.</p>
+    </section>
+
+    <!-- Follow-ups -->
+    <section class="space-y-2">
+      <h2 class="text-xl font-semibold">Deferred to follow-ups (not in v1 scaffold)</h2>
+      <div class="flex flex-wrap gap-2">
+        <span class="badge badge-outline badge-lg">CLI wrapper</span>
+        <span class="badge badge-outline badge-lg">cron scheduling</span>
+        <span class="badge badge-outline badge-lg">watch <code class="vv-mono">audio_src</code> for live updates</span>
+        <span class="badge badge-outline badge-lg">semantic / embedding link retrieval</span>
+        <span class="badge badge-outline badge-lg">app-suggested dictionary terms</span>
+        <span class="badge badge-outline badge-lg">live OllamaBackend</span>
+        <span class="badge badge-outline badge-lg">human review staging</span>
+      </div>
+      <p class="text-sm text-base-content/60">v1 is on-demand: run a Python file per recording. The CLI + cron/watch land once the core pipeline is proven.</p>
+    </section>
+
+  </div>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs";
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const paint = document.createElement("canvas").getContext("2d");
+  function toRgba(color){paint.clearRect(0,0,1,1);paint.fillStyle="#000";paint.fillStyle=color;paint.fillRect(0,0,1,1);return paint.getImageData(0,0,1,1).data;}
+  function compositeRgba(f,b){const fa=f[3]/255,ba=b[3]/255,a=fa+ba*(1-fa);if(a===0)return[0,0,0,0];return[(f[0]*fa+b[0]*ba*(1-fa))/a,(f[1]*fa+b[1]*ba*(1-fa))/a,(f[2]*fa+b[2]*ba*(1-fa))/a,a*255];}
+  function pageIsDark(){const root=document.documentElement;const rb=toRgba(getComputedStyle(root).backgroundColor);const bb=document.body?toRgba(getComputedStyle(document.body).backgroundColor):[0,0,0,0];const[r,g,b,a]=compositeRgba(bb,rb);if(a>0)return(0.2126*r+0.7152*g+0.0722*b)/255<0.5;return darkQuery.matches;}
+  const diagrams=[...document.querySelectorAll(".mermaid")].map(el=>({el,src:el.textContent}));
+  let applied,rendering=false,queued=false;
+  function queueRender(){queued=true;if(rendering)return;void render();}
+  async function render(){rendering=true;try{while(queued){queued=false;const theme=pageIsDark()?"dark":"default";if(theme===applied)continue;mermaid.initialize({startOnLoad:false,theme,securityLevel:"strict"});for(const{el,src}of diagrams){el.removeAttribute("data-processed");el.textContent=src;}try{await mermaid.run({nodes:diagrams.map(d=>d.el)});}catch(e){console.error(e);return;}applied=theme;}}finally{rendering=false;if(queued)queueRender();}}
+  if(document.readyState==="complete")queueRender();else window.addEventListener("load",queueRender,{once:true});
+  const mo=new MutationObserver(queueRender);
+  for(const el of [document.documentElement,document.body]){if(!el)continue;mo.observe(el,{attributes:true,attributeFilter:["data-theme","class","style"]});}
+  darkQuery.addEventListener("change",queueRender);
+</script>
