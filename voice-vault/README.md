@@ -108,8 +108,47 @@ Everything lives in `config/`. Edit these, not the code:
 
 ## Backends
 
-Synthesis defaults to Claude (`claude-opus-4-8`). Set `[synthesis] backend = "ollama"` in
-`config.toml` to run synthesis against a local [Ollama](https://ollama.com) server instead —
-`model` becomes the Ollama model name (e.g. `qwen2.5:32b-instruct`) and `ollama_host` defaults to
-`http://localhost:11434`. A 32B+ instruction-tuned model plus a mature control plane is the
-realistic bar for decent output. Transcription is always local (faster-whisper).
+Synthesis defaults to Claude (`claude-opus-4-8`) via the Messages API (`ClaudeBackend`).
+Two alternatives avoid paid API usage entirely:
+
+- `[synthesis] backend = "ollama"` — run synthesis against a local [Ollama](https://ollama.com)
+  server. `model` becomes the Ollama model name (e.g. `qwen2.5:32b-instruct`) and `ollama_host`
+  defaults to `http://localhost:11434`. A 32B+ instruction-tuned model plus a mature control
+  plane is the realistic bar for decent output.
+- `[synthesis] backend = "claude_code"` — run synthesis on a Claude Pro/Max **subscription**
+  through the Claude Code CLI. See "Running without a paid API key" below.
+
+Transcription is always local (faster-whisper), regardless of synthesis backend.
+
+## Running without a paid API key
+
+`ClaudeBackend` talks to the Messages API, which is billed pay-as-you-go — a Claude Pro/Max
+*subscription* does not include Messages API access, even though it feels like "the same
+Claude." There are two ways to run voice-vault with no API spend at all:
+
+1. **Fully local — `backend = "ollama"`.** Nothing leaves your machine and there's no
+   subscription requirement, but you need a capable local model (32B+ instruction-tuned) and a
+   mature control plane to get decent output. See "Backends" above.
+
+2. **Subscription-powered — `backend = "claude_code"`.** If you have a Claude Pro or Max
+   subscription, install the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) and
+   authenticate it once with `claude login` (this uses your subscription, not an API key). Then
+   set in `config.toml`:
+
+   ```toml
+   [synthesis]
+   backend = "claude_code"
+   # claude_code_bin   = "claude"          # only needed if the CLI isn't on PATH
+   # claude_code_model = "claude-opus-4-8" # optional; omit to use the CLI's default model
+   ```
+
+   `ClaudeCodeBackend` shells out to `claude -p <prompt> --append-system-prompt <system>
+   --output-format json` (headless "print" mode) for each synthesis call and parses the
+   completion out of the CLI's JSON envelope, falling back to raw stdout if JSON parsing fails.
+   `ANTHROPIC_API_KEY` is never read or required by this backend. If the `claude` binary isn't
+   found, the error message tells you to install Claude Code and run `claude login`.
+
+   Trade-offs versus the direct API: each call launches a subprocess (slower, and subject to
+   whatever rate limiting/usage caps your subscription tier applies), and CLI output-format
+   details are Anthropic's to change — if `--output-format json` ever stops including a
+   top-level `result` string, this backend falls back to treating stdout as plain text.

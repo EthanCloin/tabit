@@ -47,6 +47,12 @@ class SynthesisCfg:
     splitting: str = "by_concept"
     ollama_host: str = "http://localhost:11434"
 
+    # --- claude_code backend: run synthesis on a Claude Pro/Max subscription via the Claude
+    # Code CLI instead of the (separately-billed) Messages API. Only used when
+    # backend = "claude_code".
+    claude_code_bin: str = "claude"          # path to the `claude` CLI binary
+    claude_code_model: str | None = None     # optional --model override; unset uses the CLI default
+
     # --- R2-T2 cost management (all opt-in; unset fields preserve current behavior) ---
     # Model routing: cheap vs strong tier by transcript length. Both must be set to enable
     # routing; leaving either unset keeps every call on `model` (today's behavior).

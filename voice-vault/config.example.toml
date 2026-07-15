@@ -34,11 +34,19 @@ compute_type = "default"          # default | int8 | float16 | ...
 vad          = true               # voice-activity detection trims silence
 
 [synthesis]
-backend        = "claude"         # claude | ollama
+backend        = "claude"         # claude | ollama | claude_code
 model          = "claude-opus-4-8"  # for ollama, an Ollama model name, e.g. "qwen2.5:32b-instruct"
 note_lifecycle = "evergreen"      # evergreen (merge-with-preserve) | append
 splitting      = "by_concept"     # by_concept | single
 ollama_host    = "http://localhost:11434"  # only used when backend = "ollama"
+
+# claude_code: run synthesis through the Claude Code CLI (`claude -p ...`, headless mode)
+# instead of the Messages API. This lets a Claude Pro/Max *subscription* power synthesis --
+# a Pro/Max plan does NOT grant Messages API access (that's billed separately, pay-as-you-go),
+# but the CLI can authenticate with the subscription via `claude login` and run non-interactively.
+# Only used when backend = "claude_code".
+# claude_code_bin   = "claude"          # path to the CLI binary, if not on PATH
+# claude_code_model = "claude-opus-4-8" # optional --model override; unset uses the CLI's default
 
 # --- cost management (all opt-in; leave unset to keep today's behavior unchanged) ---
 # Model routing: route short/simple transcripts to a cheap model, longer ones to a strong one.
