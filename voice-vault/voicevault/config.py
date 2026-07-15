@@ -74,6 +74,10 @@ class Config:
         return self.paths.output_dir / "notes"
 
     @property
+    def mocs_dir(self) -> Path:
+        return self.paths.output_dir / "MOCs"
+
+    @property
     def system_dir(self) -> Path:
         return self.paths.output_dir / "_system"
 
