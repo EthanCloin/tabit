@@ -23,6 +23,7 @@ from . import vault_context
 from .backends import SynthesisBackend
 from .config import Config
 from .ledger import Ledger
+from .skills import load_ofm_reference
 
 _LESSON_RE = re.compile(r"%%FEEDBACK-LESSON:\s*(.+?)\s*%%", re.IGNORECASE | re.DOTALL)
 
@@ -160,8 +161,12 @@ def _write_note(backend: SynthesisBackend, cfg: Config, plan: Plan, transcript: 
     else:
         lifecycle = "Create a new note."
 
+    ofm_reference = load_ofm_reference()
+
     user = f"""STYLE GUIDE:
 {guide}
+
+{ofm_reference}
 
 ACTIVE FEEDBACK LESSONS (obey these):
 {feedback}
