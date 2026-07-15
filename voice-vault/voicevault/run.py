@@ -6,6 +6,10 @@ domains or feedback lessons the synthesis pass proposes are appended to the cont
 human review (never activated automatically). Every write lands under ``output_dir``; the source
 folder and ``link_context_dir`` are read-only. When ``git.commit_each_run`` is set, ``output_dir``
 is treated as its own git repo and gets one audit commit per run.
+
+``resynth`` is the fast-loop sibling of ``run``: it re-synthesizes notes from transcripts already
+sitting in ``_archive/transcripts/`` (no audio, no transcription) so control-file edits
+(dictionary/taxonomy/synthesis-guide/feedback/tags) can be iterated on quickly.
 """
 
 from __future__ import annotations
@@ -78,7 +82,7 @@ def _ensure_gitignore(cfg: Config) -> None:
                              encoding="utf-8")
 
 
-def _commit(cfg: Config, report: RunReport, *, log=print) -> None:
+def _commit(cfg: Config, report: RunReport, *, unit_label: str = "recording(s)", log=print) -> None:
     """One audit commit inside ``output_dir`` (its own repo — never the parent vault's)."""
     out = cfg.paths.output_dir
     _ensure_gitignore(cfg)
@@ -90,10 +94,30 @@ def _commit(cfg: Config, report: RunReport, *, log=print) -> None:
         log("  git: nothing to commit")
         return
     names = ", ".join(p.stem for p in report.notes_written) or "no note changes"
-    msg = f"voice-vault: {len(report.processed)} recording(s) — {names}"
+    msg = f"voice-vault: {len(report.processed)} {unit_label} — {names}"
     res = _git(out, "commit", "-m", msg)
     report.committed = res.returncode == 0
     log("  git: committed" if report.committed else f"  git: commit failed — {res.stderr.strip()}")
+
+
+def _synthesize_and_evolve(backend, cfg: Config, transcript: str, ledger: Ledger,
+                           source_name: str, report: RunReport, *, log) -> None:
+    """Synthesis + evolve step shared by ``run`` and ``resynth``: write/update notes for one
+    transcript, then surface any proposed domains/lessons for human review."""
+    result = synthesize(backend, cfg, transcript, ledger, source_name=source_name)
+    for note in result.written:
+        log(f"  note: {note.name}")
+    report.notes_written.extend(result.written)
+
+    # Evolve: surface proposals for human review (never auto-activated).
+    added_domains = tax_mod.append_proposals(cfg.paths.taxonomy, result.proposed_domains)
+    added_lessons = feedback_mod.append_proposals(cfg.paths.feedback, result.feedback_lessons)
+    report.proposed_domains.extend(d.name for d in added_domains)
+    report.proposed_lessons.extend(added_lessons)
+    for domain in added_domains:
+        log(f"  proposed domain → taxonomy.md ## Proposed: {domain.name}")
+    for lesson in added_lessons:
+        log(f"  proposed lesson → feedback.md ## Proposed: {lesson}")
 
 
 def _process_one(audio_path: Path, cfg: Config, backend, ledger: Ledger,
@@ -119,20 +143,7 @@ def _process_one(audio_path: Path, cfg: Config, backend, ledger: Ledger,
     transcript_path.write_text(transcript + "\n", encoding="utf-8")
 
     source_name = str(transcript_path.relative_to(cfg.paths.output_dir))
-    result = synthesize(backend, cfg, transcript, ledger, source_name=source_name)
-    for note in result.written:
-        log(f"  note: {note.name}")
-    report.notes_written.extend(result.written)
-
-    # Evolve: surface proposals for human review (never auto-activated).
-    added_domains = tax_mod.append_proposals(cfg.paths.taxonomy, result.proposed_domains)
-    added_lessons = feedback_mod.append_proposals(cfg.paths.feedback, result.feedback_lessons)
-    report.proposed_domains.extend(d.name for d in added_domains)
-    report.proposed_lessons.extend(added_lessons)
-    for domain in added_domains:
-        log(f"  proposed domain → taxonomy.md ## Proposed: {domain.name}")
-    for lesson in added_lessons:
-        log(f"  proposed lesson → feedback.md ## Proposed: {lesson}")
+    _synthesize_and_evolve(backend, cfg, transcript, ledger, source_name, report, log=log)
 
     ledger.record_audio(audio_hash, audio_path.name, transcript)
     ledger.save()
@@ -177,4 +188,84 @@ def run(cfg: Config, files: list[Path] | None = None, *, dry_run: bool = False,
 
     log(f"Done. {len(report.processed)} processed, {len(report.skipped)} skipped, "
         f"{len(report.notes_written)} note(s) written.")
+    return report
+
+
+def _discover_transcripts(cfg: Config, explicit: list[Path] | None) -> list[Path]:
+    """Archived transcripts to resynth — explicit args, or every ``.txt`` under
+    ``_archive/transcripts/``. A bare filename in ``explicit`` (no directory component) is
+    resolved relative to that archive so ``resynth foo.txt`` works from anywhere."""
+    if explicit:
+        resolved = []
+        for p in explicit:
+            p = Path(p)
+            if p.name == str(p):  # bare filename, no path separators
+                candidate = cfg.transcripts_dir / p.name
+                p = candidate if candidate.exists() else p
+            resolved.append(p.expanduser().resolve())
+        return resolved
+    return sorted(cfg.transcripts_dir.glob("*.txt"))
+
+
+def resynth(cfg: Config, files: list[Path] | None = None, *, dry_run: bool = False,
+           log=print) -> RunReport:
+    """Fast loop: re-synthesize notes from already-archived transcripts.
+
+    This is the refinement loop for editing the control plane (dictionary/taxonomy/
+    synthesis-guide/feedback/tags): pick up an existing ``_archive/transcripts/*.txt``,
+    re-run synthesis (and the T3 linking pass) against it, and let merge-with-preserve fold
+    the result into notes. ``files`` limits the run to specific transcripts (default: all
+    archived transcripts).
+
+    Deliberately does NOT import :mod:`voicevault.transcribe` or touch ``audio_src`` — no audio
+    is read, no whisper model is ever loaded. It also does not consult
+    ``Ledger.seen_audio``/``record_audio`` (those key off audio content-hashes, which are
+    irrelevant here); a transcript can be resynthesized as many times as the control files
+    change, and merge-with-preserve (via ``Ledger.is_hand_edited`` / ``set_app_hash`` inside
+    :func:`~voicevault.synthesize.synthesize`) is what keeps re-running idempotent and
+    non-destructive of human edits.
+    """
+    cfg.ensure_dirs()
+    ledger = Ledger.load(cfg.system_dir)
+    backend = get_backend(cfg)
+
+    report = RunReport()
+    candidates = _discover_transcripts(cfg, files)
+    if not candidates:
+        log(f"No archived transcripts in {cfg.transcripts_dir}")
+        return report
+
+    for transcript_path in candidates:
+        if not transcript_path.exists():
+            log(f"  skip (missing): {transcript_path}")
+            report.skipped.append(transcript_path)
+            continue
+
+        log(f"Resynthesizing: {transcript_path.name}")
+        transcript = transcript_path.read_text(encoding="utf-8")
+
+        if dry_run:
+            log(f"  [dry-run] would re-synthesize notes from {transcript_path.name} "
+                "(merge-with-preserve honored; no audio/whisper touched)")
+            report.processed.append(transcript_path)
+            continue
+
+        try:
+            source_name = str(transcript_path.relative_to(cfg.paths.output_dir))
+        except ValueError:
+            source_name = transcript_path.name
+        _synthesize_and_evolve(backend, cfg, transcript, ledger, source_name, report, log=log)
+        report.processed.append(transcript_path)
+
+    if not dry_run:
+        ledger.save()
+        # Same deterministic linking pass `run` uses — keeps the vault orphan-free after a
+        # resynth changes note content.
+        report.graph = linking_mod.link_vault(cfg, ledger, log=log)
+
+        if cfg.git.commit_each_run and report.processed:
+            _commit(cfg, report, unit_label="resynthesized transcript(s)", log=log)
+
+    log(f"Done. {len(report.processed)} transcript(s) resynthesized, {len(report.skipped)} "
+        f"skipped, {len(report.notes_written)} note(s) written.")
     return report
