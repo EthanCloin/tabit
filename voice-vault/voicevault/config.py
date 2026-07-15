@@ -45,6 +45,7 @@ class SynthesisCfg:
     model: str = "claude-opus-4-8"
     note_lifecycle: str = "evergreen"
     splitting: str = "by_concept"
+    ollama_host: str = "http://localhost:11434"
 
 
 @dataclass

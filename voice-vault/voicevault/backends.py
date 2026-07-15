@@ -1,9 +1,9 @@
 """Swappable synthesis backends.
 
 The pipeline talks to a model only through :class:`SynthesisBackend.complete`. Claude is the
-default (best quality for structured note-splitting, linking, and style imitation); Ollama is a
-deliberate stub — the interface exists so a local backend can be dropped in once the control
-files are mature enough to carry a smaller model.
+default (best quality for structured note-splitting, linking, and style imitation); Ollama talks
+to a local model server for cost-free/offline synthesis once the control files are mature enough
+to carry a smaller model. Select the backend via ``[synthesis] backend`` in config.toml.
 """
 
 from __future__ import annotations
@@ -50,17 +50,73 @@ class ClaudeBackend(SynthesisBackend):
 
 
 class OllamaBackend(SynthesisBackend):
-    """Stub. See the local-vs-cloud discussion in the README before wiring this up."""
+    """Talks to a local Ollama server via its HTTP API (``POST /api/generate``).
+
+    Uses stdlib ``urllib`` — no extra runtime dependency is needed just to make an HTTP
+    request, so there's nothing to lazily import here (unlike ``anthropic``, which is a real
+    heavy dependency). Host and model are configurable via ``[synthesis]`` in config.toml.
+    """
 
     def __init__(self, cfg: Config):
         self.model = cfg.synthesis.model
+        self.host = (cfg.synthesis.ollama_host or "http://localhost:11434").rstrip("/")
 
-    def complete(self, system: str, user: str) -> str:  # pragma: no cover - stub
-        raise NotImplementedError(
-            "OllamaBackend is a stub. Implement it with the ollama Python client "
-            "(`pip install voice-vault[ollama]`) once you're ready to run synthesis locally. "
-            "A 32B+ instruction-tuned model plus a mature control plane is the realistic bar."
+    def complete(self, system: str, user: str) -> str:
+        import json
+        import urllib.error
+        import urllib.request
+
+        payload = json.dumps(
+            {"model": self.model, "prompt": user, "system": system, "stream": False}
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.host}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
+
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                body = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", errors="replace")
+            message = _extract_ollama_error(raw)
+            if "not found" in message.lower():
+                raise RuntimeError(
+                    f"Ollama model '{self.model}' is not pulled on {self.host}. "
+                    f"Run `ollama pull {self.model}` and try again. (server said: {message})"
+                ) from exc
+            raise RuntimeError(
+                f"Ollama request to {self.host} failed ({exc.code}): {message}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"Could not reach Ollama at {self.host}. Is the server running "
+                f"(`ollama serve`)? (underlying error: {exc.reason})"
+            ) from exc
+
+        data = json.loads(body)
+        if "error" in data:
+            message = data["error"]
+            if "not found" in message.lower():
+                raise RuntimeError(
+                    f"Ollama model '{self.model}' is not pulled on {self.host}. "
+                    f"Run `ollama pull {self.model}` and try again. (server said: {message})"
+                )
+            raise RuntimeError(f"Ollama returned an error: {message}")
+        return data.get("response", "").strip()
+
+
+def _extract_ollama_error(raw_body: str) -> str:
+    """Best-effort extraction of Ollama's ``{"error": "..."}`` message from a raw HTTP body."""
+    import json
+
+    try:
+        data = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return raw_body
+    return data.get("error", raw_body)
 
 
 def get_backend(cfg: Config) -> SynthesisBackend:
