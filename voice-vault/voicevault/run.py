@@ -18,11 +18,13 @@ from pathlib import Path
 
 from . import dictionary as dict_mod
 from . import feedback as feedback_mod
+from . import linking as linking_mod
 from . import taxonomy as tax_mod
 from . import transcribe as transcribe_mod
 from .backends import get_backend
 from .config import Config
 from .ledger import Ledger, hash_file
+from .linking import GraphReport
 from .synthesize import synthesize
 
 # A file whose mtime is more recent than this is assumed to still be syncing (Obsidian mobile
@@ -37,6 +39,7 @@ class RunReport:
     notes_written: list[Path] = field(default_factory=list)
     proposed_domains: list[str] = field(default_factory=list)
     proposed_lessons: list[str] = field(default_factory=list)
+    graph: GraphReport | None = None   # populated by the post-synthesis linking pass
     committed: bool = False
 
 
@@ -163,6 +166,11 @@ def run(cfg: Config, files: list[Path] | None = None, *, dry_run: bool = False,
         log(f"Processing: {audio_path.name}")
         _process_one(audio_path, cfg, backend, ledger, entries, report,
                      dry_run=dry_run, log=log)
+
+    # Post-synthesis linking pass: MOCs, concept hubs, stub resolution, graph health. Runs on
+    # the whole vault (deterministic, no API), keeping it navigable and orphan-free every run.
+    if not dry_run:
+        report.graph = linking_mod.link_vault(cfg, ledger, log=log)
 
     if not dry_run and cfg.git.commit_each_run and report.processed:
         _commit(cfg, report, log=log)
