@@ -60,9 +60,15 @@ class RunReport:
         return self.tokens_input + self.tokens_output
 
 
-def _is_stable(path: Path, now: float) -> bool:
+def _is_stable(path: Path, now: float, *, threshold: float = _STABILITY_SECONDS) -> bool:
+    """True once ``path``'s mtime hasn't moved for ``threshold`` seconds.
+
+    Used by ``run()`` to skip audio still being synced in, and reused by :mod:`voicevault.watch`
+    (R2-T3) with a configurable ``threshold`` (``watch.debounce_seconds``) both to wait out a
+    write-in-progress and to debounce a burst of rapid writes into a single logical change.
+    """
     try:
-        return (now - path.stat().st_mtime) >= _STABILITY_SECONDS
+        return (now - path.stat().st_mtime) >= threshold
     except OSError:
         return False
 
