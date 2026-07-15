@@ -15,10 +15,6 @@ dependencies = [
     "anthropic>=0.40",
 ]
 
-[project.optional-dependencies]
-# Local synthesis backend (stub today; see voicevault/backends.py).
-ollama = ["ollama>=0.3"]
-
 [project.scripts]
 # Primary invocation is `python -m voicevault`, but this console script works too.
 voice-vault = "voicevault.__main__:main"

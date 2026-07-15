@@ -108,6 +108,8 @@ Everything lives in `config/`. Edit these, not the code:
 
 ## Backends
 
-Synthesis defaults to Claude (`claude-opus-4-8`). `OllamaBackend` is a deliberate stub — the
-interface exists so a local model can be dropped in once the control files are mature enough to
-carry it. Transcription is always local (faster-whisper).
+Synthesis defaults to Claude (`claude-opus-4-8`). Set `[synthesis] backend = "ollama"` in
+`config.toml` to run synthesis against a local [Ollama](https://ollama.com) server instead —
+`model` becomes the Ollama model name (e.g. `qwen2.5:32b-instruct`) and `ollama_host` defaults to
+`http://localhost:11434`. A 32B+ instruction-tuned model plus a mature control plane is the
+realistic bar for decent output. Transcription is always local (faster-whisper).

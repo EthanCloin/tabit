@@ -34,10 +34,11 @@ compute_type = "default"          # default | int8 | float16 | ...
 vad          = true               # voice-activity detection trims silence
 
 [synthesis]
-backend        = "claude"         # claude | ollama (ollama is a stub — see backends.py)
-model          = "claude-opus-4-8"
+backend        = "claude"         # claude | ollama
+model          = "claude-opus-4-8"  # for ollama, an Ollama model name, e.g. "qwen2.5:32b-instruct"
 note_lifecycle = "evergreen"      # evergreen (merge-with-preserve) | append
 splitting      = "by_concept"     # by_concept | single
+ollama_host    = "http://localhost:11434"  # only used when backend = "ollama"
 
 [git]
 commit_each_run = true            # one commit per run in output_dir = audit trail
