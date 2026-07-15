@@ -60,3 +60,13 @@ ollama_host    = "http://localhost:11434"  # only used when backend = "ollama"
 [git]
 commit_each_run = true            # one commit per run in output_dir = audit trail
 include_audio   = false           # true -> also commit raw audio blobs (consider git-lfs)
+
+# --- watch mode (R2-T3): `python -m voicevault watch` -----------------------------------
+# Polls audio_src for new/modified files (stdlib only -- no always-on dependency) and, once a
+# file has been stable for poll_interval_seconds, invokes the normal `run` path on it.
+[watch]
+poll_interval_seconds  = 2.0      # how often to scan for changes
+debounce_seconds       = 3.0      # quiet period a changed path must have before it's actioned
+watch_control_files    = false    # true -> also watch config/*.md and `resynth` on edit
+use_watchdog           = false    # true -> use the optional `watchdog` package (lazy import)
+                                   # for event-driven notification instead of polling stat()

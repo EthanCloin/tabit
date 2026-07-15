@@ -71,11 +71,23 @@ class GitCfg:
 
 
 @dataclass
+class WatchCfg:
+    """R2-T3: settings for ``python -m voicevault watch``. All opt-in defaults preserve
+    the simplest useful behavior (poll audio_src only) when left unset in config.toml."""
+
+    poll_interval_seconds: float = 2.0     # how often to scan audio_src / config for changes
+    debounce_seconds: float = 3.0          # quiet period a path must have before it's actioned
+    watch_control_files: bool = False      # also watch config/*.md and trigger `resynth` on edit
+    use_watchdog: bool = False             # opt into the `watchdog` fast path (lazily imported)
+
+
+@dataclass
 class Config:
     paths: Paths
     transcribe: TranscribeCfg = field(default_factory=TranscribeCfg)
     synthesis: SynthesisCfg = field(default_factory=SynthesisCfg)
     git: GitCfg = field(default_factory=GitCfg)
+    watch: WatchCfg = field(default_factory=WatchCfg)
 
     # Derived output sub-locations. All writes go under output_dir.
     @property
@@ -153,6 +165,7 @@ def load_config(config_path: str | Path) -> Config:
         transcribe=TranscribeCfg(**raw.get("transcribe", {})),
         synthesis=SynthesisCfg(**raw.get("synthesis", {})),
         git=GitCfg(**raw.get("git", {})),
+        watch=WatchCfg(**raw.get("watch", {})),
     )
     _guard_paths(cfg)
     return cfg
